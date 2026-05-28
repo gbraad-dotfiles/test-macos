@@ -1,0 +1,103 @@
+name: macOS RDP
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+
+    runs-on: macos-latest
+    timeout-minutes: 9999
+
+    steps:
+      - name: Get last 3 chars of hostname
+        id: runner_id
+        run: |
+          echo "last3=${HOSTNAME: -3}" >> $GITHUB_OUTPUT
+
+      - name: Tailscale
+        uses: tailscale/github-action@v3
+        with:
+          oauth-client-id: ${{ secrets.TAILSCALE_CLIENTID }}
+          oauth-secret: ${{ secrets.TAILSCALE_SECRET }}
+          tags: tag:actions
+          hostname: "dotfiles-${{ steps.runner_id.outputs.last3 }}"
+          use-cache: 'true'
+          args: --ssh
+
+      - name: Create and share userdirs
+        run: |
+          cd ${{ github.workspace }}
+          mkdir -p Projects Documents Downloads
+          ln -s ${{ github.workspace }}/Projects  ${HOME}/Projects
+          ln -s ${{ github.workspace }}/Documents ${HOME}/Documents
+          ln -s ${{ github.workspace }}/Downloads ${HOME}/Downloads
+          tailscale drive share projects ${HOME}/Projects
+          tailscale drive share documents ${HOME}/Documents
+          tailscale drive share downloads ${HOME}/Downloads
+ 
+      - name: Dotfiles (install from action)
+        uses: gbraad-dotfiles/install-action@main
+        with:
+          upstream: true
+        
+      - name: Usage message by console
+        id: usage
+        run: |
+          IPR=`tailscale ip -4`
+          echo "Use the following command to connect \`tailscale ssh runner@${IPR}\` or \`rscreen runner@${IPR}\`"
+          echo "runner_ip=${IPR}" >> $GITHUB_OUTPUT
+
+      - name: Usage message by telegram
+        uses: gbraad-dotfiles/message-action@main
+        with:
+          message: "Access: `tailscale ssh runner@${{ steps.usage.outputs.runner_ip }}`"
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+ 
+      - name: Hang around
+        if: ${{ always() }}
+        run: |
+          sleep 18000
+
+      - name: Message user; 1 hour
+        run: |
+          sudo wall "about 1 hour remaining"
+          sleep 1800
+
+      - name: Message user; 20 minutes
+        run: |
+          sudo wall "20 minutes remaining"
+          sleep 1200
+
+      - name: Upload Artifact - Projects
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: projects
+          path: ${{ github.workspace }}/Projects/
+          retention-days: 1
+          include-hidden-files: true
+  
+      - name: Upload Artifact - Documents
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: documents
+          path: ${{ github.workspace }}/Documents/
+          retention-days: 1
+          include-hidden-files: true
+
+      - name: Upload Artifact - Downloads
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: downloads
+          path: ${{ github.workspace }}/Downloads/
+          retention-days: 1
+          include-hidden-files: true
+
+      - name: Hang around (timeout)
+        run: |
+          sleep infinity
