@@ -40,7 +40,12 @@ jobs:
         uses: gbraad-dotfiles/install-action@main
         with:
           upstream: true
-        
+
+      - name: Enable RDP
+        uses: gbraad-actions/enable-mac-remote@main
+        with:
+          vnc_password: ${{ secrets.USER_PASSWORD }}
+          
       - name: Usage message by console
         id: usage
         run: |
